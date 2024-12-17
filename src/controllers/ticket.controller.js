@@ -12,6 +12,35 @@
 // );
 const Joi = require("joi");
 
+const {Storage} = require("@google-cloud/storage");
+//Connect to Cloud Storage
+const storage = new Storage({
+  keyFilename: "app-key.json"
+});
+const bucketName = 'ticket-project-assets';
+
+async function uploadFileToCloudStorage(file) {
+  const bucket = storage.bucket(bucketName);
+
+  const fileName = `${Date.now()}_${file.originalname}`;
+  const blob = bucket.file(fileName);
+  const blobStream = blob.createWriteStream({
+    resumable: false,
+    metadata: {
+      contentType: file.mimetype
+    }
+  });
+  
+
+  return new Promise((resolve, reject) => {
+    blobStream.on('finish', () => {
+      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${blob.name}`;
+      resolve(publicUrl);
+    }).on('error', (err) => {
+      reject(err);
+    }).end(file.buffer);
+  });
+}
 //=================================================================
 
 async function create(req, res) {
@@ -38,10 +67,34 @@ async function create(req, res) {
     await schema.validateAsync(req.body);
   }
   catch(error){
-    return res.status(403).send(error.toString());
+    return res.status(400).send(error.toString());
   }
 
-  // return res.status(200).send({ message: 'POST /ticket' });
+  const imageFile = req.file;
+  
+  if(imageFile){
+    try{
+      const imageUrl = await uploadFileToCloudStorage(imageFile);
+      console.log(imageUrl);
+
+      return res.status(200).send({ 
+        message: 'POST /ticket Success',
+        data: {
+          ticketTitle,
+          ticketPrice,
+          ticketDescription,
+          imageUrl,
+        },
+
+      });
+    }catch(error){
+      console.log(error.message);
+      return res.status(500).send(`Failed to upload image to cloud storage: ${error.message}`);
+    }
+  }else{
+    return res.status(400).send({message: "Image file is required"});
+  }
+
 }
 
 async function getAll(req, res) {

@@ -21,3 +21,5 @@ Thumbs.db
 
 # Ignore dependency directories
 vendor/
+
+app-key.json
