@@ -13,10 +13,10 @@ const hashPassword = async (password) => {
 
 const verifyPassword = async (plainPassword, hashedPassword) => {
   try {
-      const match = await bcrypt.compare(plainPassword, hashedPassword);
-      return match;
+    const match = await bcrypt.compare(plainPassword, hashedPassword);
+    return match;
   } catch (error) {
-      console.error('Error verifying password:', error);
+    console.error('Error verifying password:', error);
   }
 };
 
