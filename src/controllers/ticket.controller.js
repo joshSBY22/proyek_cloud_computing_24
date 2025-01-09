@@ -4,6 +4,7 @@ const {Storage} = require("@google-cloud/storage");
 const db = require("../database/firestore");
 const { formatCurrency, isValidLatitude, isValidLongitude } = require("../helper/number");
 const { verifyToken } = require("../helper/jwtToken");
+const { findNearbyTickets, haversineDistance } = require("../helper/haversineDistance");
 //Connect to Cloud Storage
 const storage = new Storage({
   keyFilename: "app-key.json"
@@ -205,6 +206,81 @@ async function getAll(req, res) {
     return res.status(500).send({ message: "Internal Server Error", error: error.message });
   }
 
+}
+
+async function getTicketsNearby(req, res) {
+  const { latitude_position, longitude_position, radius_in_kilometre } = req.body;
+
+  const schema = Joi.object({
+    latitude_position: Joi.string().required().messages({
+      'string.empty': "Latitude position is required",
+      'any.required': "Latitude position is required"
+    }),
+    longitude_position: Joi.string().required().messages({
+      'string.empty': "Longitude position is required",
+      'any.required': "Longitude position is required"
+    }),
+    radius_in_kilometre: Joi.number().min(1).required().messages({
+      'number.base': "Radius must be a number",
+      'number.empty': "Radius in kilometre is required",
+      "number.min": "Radius must be greater than or equal to 1",
+      "any.required": "Radius in kilometre is required",
+    }),
+  });
+
+  //Schema Validation
+  try{
+    await schema.validateAsync(req.body, {abortEarly: false});
+  }
+  catch(error){
+    if (error.isJoi) {
+      // Joi validation error
+      return res.status(400).send({
+        message: error.details.map((detail) => detail.message).join(", ") || "Validation error",
+      });
+    }
+
+    return res.status(500).send({ message: error.message });
+  }
+
+  try {
+    const latitude = latitude_position.trim();
+    const longitude = longitude_position.trim();
+
+    if(!isValidLatitude(latitude) || !isValidLongitude(longitude)){
+      return res.status(400).send({message: "Latitude must be between -90 and 90, Longitude must be between -180 and 180"});
+    }
+
+    const ticketsSnapshot = await db.collection('tickets').where("status", "==", "active").get();
+
+    // Check if the users collection is empty
+    if (ticketsSnapshot.empty) {
+      return res.status(404).send({ message: "No tickets found" });
+    }
+
+    // Map over the documents to extract data
+    const tickets = ticketsSnapshot.docs.map(doc => ({
+      ticket_id: doc.id, // Include document ID
+      ...doc.data()
+    }));
+
+    const nearbyTickets = findNearbyTickets(tickets, latitude, longitude, radius_in_kilometre);
+
+    if(nearbyTickets.length > 0){
+      nearbyTickets.forEach((ticket) => {
+        ticket.price = formatCurrency(ticket.price);
+        ticket.distance = `${haversineDistance(latitude, longitude, ticket.latitude_position, ticket.longitude_position).toFixed(1)} Kilometres`;
+      });
+
+      // Send the tickets data as a response
+      return res.status(200).send({ data: nearbyTickets });
+    }else{
+      return res.status(404).send({ message: "No nearby tickets found" });
+    }
+
+  } catch (error) {
+    return res.status(500).send({ message: "Internal Server Error", error: error.message });
+  }
 }
 
 async function getById(req, res) {
@@ -432,6 +508,7 @@ async function remove(req, res) {
 module.exports = {
   create,
   getAll,
+  getTicketsNearby,
   getById,
   update,
   remove
