@@ -209,7 +209,7 @@ async function getAll(req, res) {
 }
 
 async function getTicketsNearby(req, res) {
-  const { latitude_position, longitude_position, radius_in_kilometre } = req.body;
+  const { latitude_position, longitude_position, radius_in_kilometre } = req.query;
 
   const schema = Joi.object({
     latitude_position: Joi.string().required().messages({
@@ -230,7 +230,7 @@ async function getTicketsNearby(req, res) {
 
   //Schema Validation
   try{
-    await schema.validateAsync(req.body, {abortEarly: false});
+    await schema.validateAsync(req.query, {abortEarly: false});
   }
   catch(error){
     if (error.isJoi) {
